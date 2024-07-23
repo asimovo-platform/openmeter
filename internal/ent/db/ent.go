@@ -17,6 +17,8 @@ import (
 	"github.com/openmeterio/openmeter/internal/ent/db/feature"
 
 	dbgrant "github.com/openmeterio/openmeter/internal/ent/db/grant"
+	"github.com/openmeterio/openmeter/internal/ent/db/notificationchannel"
+	"github.com/openmeterio/openmeter/internal/ent/db/notificationrule"
 	"github.com/openmeterio/openmeter/internal/ent/db/usagereset"
 )
 
@@ -78,11 +80,13 @@ var (
 func checkColumn(table, column string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			balancesnapshot.Table: balancesnapshot.ValidColumn,
-			entitlement.Table:     entitlement.ValidColumn,
-			feature.Table:         feature.ValidColumn,
-			dbgrant.Table:         dbgrant.ValidColumn,
-			usagereset.Table:      usagereset.ValidColumn,
+			balancesnapshot.Table:     balancesnapshot.ValidColumn,
+			entitlement.Table:         entitlement.ValidColumn,
+			feature.Table:             feature.ValidColumn,
+			dbgrant.Table:             dbgrant.ValidColumn,
+			notificationchannel.Table: notificationchannel.ValidColumn,
+			notificationrule.Table:    notificationrule.ValidColumn,
+			usagereset.Table:          usagereset.ValidColumn,
 		})
 	})
 	return columnCheck(table, column)

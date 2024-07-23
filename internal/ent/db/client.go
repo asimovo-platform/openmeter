@@ -19,6 +19,8 @@ import (
 	"github.com/openmeterio/openmeter/internal/ent/db/entitlement"
 	"github.com/openmeterio/openmeter/internal/ent/db/feature"
 	dbgrant "github.com/openmeterio/openmeter/internal/ent/db/grant"
+	"github.com/openmeterio/openmeter/internal/ent/db/notificationchannel"
+	"github.com/openmeterio/openmeter/internal/ent/db/notificationrule"
 	"github.com/openmeterio/openmeter/internal/ent/db/usagereset"
 )
 
@@ -35,6 +37,10 @@ type Client struct {
 	Feature *FeatureClient
 	// Grant is the client for interacting with the Grant builders.
 	Grant *GrantClient
+	// NotificationChannel is the client for interacting with the NotificationChannel builders.
+	NotificationChannel *NotificationChannelClient
+	// NotificationRule is the client for interacting with the NotificationRule builders.
+	NotificationRule *NotificationRuleClient
 	// UsageReset is the client for interacting with the UsageReset builders.
 	UsageReset *UsageResetClient
 }
@@ -52,6 +58,8 @@ func (c *Client) init() {
 	c.Entitlement = NewEntitlementClient(c.config)
 	c.Feature = NewFeatureClient(c.config)
 	c.Grant = NewGrantClient(c.config)
+	c.NotificationChannel = NewNotificationChannelClient(c.config)
+	c.NotificationRule = NewNotificationRuleClient(c.config)
 	c.UsageReset = NewUsageResetClient(c.config)
 }
 
@@ -143,13 +151,15 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:             ctx,
-		config:          cfg,
-		BalanceSnapshot: NewBalanceSnapshotClient(cfg),
-		Entitlement:     NewEntitlementClient(cfg),
-		Feature:         NewFeatureClient(cfg),
-		Grant:           NewGrantClient(cfg),
-		UsageReset:      NewUsageResetClient(cfg),
+		ctx:                 ctx,
+		config:              cfg,
+		BalanceSnapshot:     NewBalanceSnapshotClient(cfg),
+		Entitlement:         NewEntitlementClient(cfg),
+		Feature:             NewFeatureClient(cfg),
+		Grant:               NewGrantClient(cfg),
+		NotificationChannel: NewNotificationChannelClient(cfg),
+		NotificationRule:    NewNotificationRuleClient(cfg),
+		UsageReset:          NewUsageResetClient(cfg),
 	}, nil
 }
 
@@ -167,13 +177,15 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:             ctx,
-		config:          cfg,
-		BalanceSnapshot: NewBalanceSnapshotClient(cfg),
-		Entitlement:     NewEntitlementClient(cfg),
-		Feature:         NewFeatureClient(cfg),
-		Grant:           NewGrantClient(cfg),
-		UsageReset:      NewUsageResetClient(cfg),
+		ctx:                 ctx,
+		config:              cfg,
+		BalanceSnapshot:     NewBalanceSnapshotClient(cfg),
+		Entitlement:         NewEntitlementClient(cfg),
+		Feature:             NewFeatureClient(cfg),
+		Grant:               NewGrantClient(cfg),
+		NotificationChannel: NewNotificationChannelClient(cfg),
+		NotificationRule:    NewNotificationRuleClient(cfg),
+		UsageReset:          NewUsageResetClient(cfg),
 	}, nil
 }
 
@@ -202,21 +214,23 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
-	c.BalanceSnapshot.Use(hooks...)
-	c.Entitlement.Use(hooks...)
-	c.Feature.Use(hooks...)
-	c.Grant.Use(hooks...)
-	c.UsageReset.Use(hooks...)
+	for _, n := range []interface{ Use(...Hook) }{
+		c.BalanceSnapshot, c.Entitlement, c.Feature, c.Grant, c.NotificationChannel,
+		c.NotificationRule, c.UsageReset,
+	} {
+		n.Use(hooks...)
+	}
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
-	c.BalanceSnapshot.Intercept(interceptors...)
-	c.Entitlement.Intercept(interceptors...)
-	c.Feature.Intercept(interceptors...)
-	c.Grant.Intercept(interceptors...)
-	c.UsageReset.Intercept(interceptors...)
+	for _, n := range []interface{ Intercept(...Interceptor) }{
+		c.BalanceSnapshot, c.Entitlement, c.Feature, c.Grant, c.NotificationChannel,
+		c.NotificationRule, c.UsageReset,
+	} {
+		n.Intercept(interceptors...)
+	}
 }
 
 // Mutate implements the ent.Mutator interface.
@@ -230,6 +244,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Feature.mutate(ctx, m)
 	case *GrantMutation:
 		return c.Grant.mutate(ctx, m)
+	case *NotificationChannelMutation:
+		return c.NotificationChannel.mutate(ctx, m)
+	case *NotificationRuleMutation:
+		return c.NotificationRule.mutate(ctx, m)
 	case *UsageResetMutation:
 		return c.UsageReset.mutate(ctx, m)
 	default:
@@ -881,6 +899,304 @@ func (c *GrantClient) mutate(ctx context.Context, m *GrantMutation) (Value, erro
 	}
 }
 
+// NotificationChannelClient is a client for the NotificationChannel schema.
+type NotificationChannelClient struct {
+	config
+}
+
+// NewNotificationChannelClient returns a client for the NotificationChannel from the given config.
+func NewNotificationChannelClient(c config) *NotificationChannelClient {
+	return &NotificationChannelClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `notificationchannel.Hooks(f(g(h())))`.
+func (c *NotificationChannelClient) Use(hooks ...Hook) {
+	c.hooks.NotificationChannel = append(c.hooks.NotificationChannel, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `notificationchannel.Intercept(f(g(h())))`.
+func (c *NotificationChannelClient) Intercept(interceptors ...Interceptor) {
+	c.inters.NotificationChannel = append(c.inters.NotificationChannel, interceptors...)
+}
+
+// Create returns a builder for creating a NotificationChannel entity.
+func (c *NotificationChannelClient) Create() *NotificationChannelCreate {
+	mutation := newNotificationChannelMutation(c.config, OpCreate)
+	return &NotificationChannelCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of NotificationChannel entities.
+func (c *NotificationChannelClient) CreateBulk(builders ...*NotificationChannelCreate) *NotificationChannelCreateBulk {
+	return &NotificationChannelCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NotificationChannelClient) MapCreateBulk(slice any, setFunc func(*NotificationChannelCreate, int)) *NotificationChannelCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NotificationChannelCreateBulk{err: fmt.Errorf("calling to NotificationChannelClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NotificationChannelCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NotificationChannelCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for NotificationChannel.
+func (c *NotificationChannelClient) Update() *NotificationChannelUpdate {
+	mutation := newNotificationChannelMutation(c.config, OpUpdate)
+	return &NotificationChannelUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NotificationChannelClient) UpdateOne(nc *NotificationChannel) *NotificationChannelUpdateOne {
+	mutation := newNotificationChannelMutation(c.config, OpUpdateOne, withNotificationChannel(nc))
+	return &NotificationChannelUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NotificationChannelClient) UpdateOneID(id string) *NotificationChannelUpdateOne {
+	mutation := newNotificationChannelMutation(c.config, OpUpdateOne, withNotificationChannelID(id))
+	return &NotificationChannelUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for NotificationChannel.
+func (c *NotificationChannelClient) Delete() *NotificationChannelDelete {
+	mutation := newNotificationChannelMutation(c.config, OpDelete)
+	return &NotificationChannelDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NotificationChannelClient) DeleteOne(nc *NotificationChannel) *NotificationChannelDeleteOne {
+	return c.DeleteOneID(nc.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NotificationChannelClient) DeleteOneID(id string) *NotificationChannelDeleteOne {
+	builder := c.Delete().Where(notificationchannel.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NotificationChannelDeleteOne{builder}
+}
+
+// Query returns a query builder for NotificationChannel.
+func (c *NotificationChannelClient) Query() *NotificationChannelQuery {
+	return &NotificationChannelQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNotificationChannel},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a NotificationChannel entity by its id.
+func (c *NotificationChannelClient) Get(ctx context.Context, id string) (*NotificationChannel, error) {
+	return c.Query().Where(notificationchannel.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NotificationChannelClient) GetX(ctx context.Context, id string) *NotificationChannel {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryRules queries the rules edge of a NotificationChannel.
+func (c *NotificationChannelClient) QueryRules(nc *NotificationChannel) *NotificationRuleQuery {
+	query := (&NotificationRuleClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := nc.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(notificationchannel.Table, notificationchannel.FieldID, id),
+			sqlgraph.To(notificationrule.Table, notificationrule.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, notificationchannel.RulesTable, notificationchannel.RulesPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(nc.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *NotificationChannelClient) Hooks() []Hook {
+	return c.hooks.NotificationChannel
+}
+
+// Interceptors returns the client interceptors.
+func (c *NotificationChannelClient) Interceptors() []Interceptor {
+	return c.inters.NotificationChannel
+}
+
+func (c *NotificationChannelClient) mutate(ctx context.Context, m *NotificationChannelMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NotificationChannelCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NotificationChannelUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NotificationChannelUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NotificationChannelDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("db: unknown NotificationChannel mutation op: %q", m.Op())
+	}
+}
+
+// NotificationRuleClient is a client for the NotificationRule schema.
+type NotificationRuleClient struct {
+	config
+}
+
+// NewNotificationRuleClient returns a client for the NotificationRule from the given config.
+func NewNotificationRuleClient(c config) *NotificationRuleClient {
+	return &NotificationRuleClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `notificationrule.Hooks(f(g(h())))`.
+func (c *NotificationRuleClient) Use(hooks ...Hook) {
+	c.hooks.NotificationRule = append(c.hooks.NotificationRule, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `notificationrule.Intercept(f(g(h())))`.
+func (c *NotificationRuleClient) Intercept(interceptors ...Interceptor) {
+	c.inters.NotificationRule = append(c.inters.NotificationRule, interceptors...)
+}
+
+// Create returns a builder for creating a NotificationRule entity.
+func (c *NotificationRuleClient) Create() *NotificationRuleCreate {
+	mutation := newNotificationRuleMutation(c.config, OpCreate)
+	return &NotificationRuleCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of NotificationRule entities.
+func (c *NotificationRuleClient) CreateBulk(builders ...*NotificationRuleCreate) *NotificationRuleCreateBulk {
+	return &NotificationRuleCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NotificationRuleClient) MapCreateBulk(slice any, setFunc func(*NotificationRuleCreate, int)) *NotificationRuleCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NotificationRuleCreateBulk{err: fmt.Errorf("calling to NotificationRuleClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NotificationRuleCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NotificationRuleCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for NotificationRule.
+func (c *NotificationRuleClient) Update() *NotificationRuleUpdate {
+	mutation := newNotificationRuleMutation(c.config, OpUpdate)
+	return &NotificationRuleUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NotificationRuleClient) UpdateOne(nr *NotificationRule) *NotificationRuleUpdateOne {
+	mutation := newNotificationRuleMutation(c.config, OpUpdateOne, withNotificationRule(nr))
+	return &NotificationRuleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NotificationRuleClient) UpdateOneID(id string) *NotificationRuleUpdateOne {
+	mutation := newNotificationRuleMutation(c.config, OpUpdateOne, withNotificationRuleID(id))
+	return &NotificationRuleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for NotificationRule.
+func (c *NotificationRuleClient) Delete() *NotificationRuleDelete {
+	mutation := newNotificationRuleMutation(c.config, OpDelete)
+	return &NotificationRuleDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NotificationRuleClient) DeleteOne(nr *NotificationRule) *NotificationRuleDeleteOne {
+	return c.DeleteOneID(nr.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NotificationRuleClient) DeleteOneID(id string) *NotificationRuleDeleteOne {
+	builder := c.Delete().Where(notificationrule.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NotificationRuleDeleteOne{builder}
+}
+
+// Query returns a query builder for NotificationRule.
+func (c *NotificationRuleClient) Query() *NotificationRuleQuery {
+	return &NotificationRuleQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNotificationRule},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a NotificationRule entity by its id.
+func (c *NotificationRuleClient) Get(ctx context.Context, id string) (*NotificationRule, error) {
+	return c.Query().Where(notificationrule.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NotificationRuleClient) GetX(ctx context.Context, id string) *NotificationRule {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryChannels queries the channels edge of a NotificationRule.
+func (c *NotificationRuleClient) QueryChannels(nr *NotificationRule) *NotificationChannelQuery {
+	query := (&NotificationChannelClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := nr.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(notificationrule.Table, notificationrule.FieldID, id),
+			sqlgraph.To(notificationchannel.Table, notificationchannel.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, notificationrule.ChannelsTable, notificationrule.ChannelsPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(nr.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *NotificationRuleClient) Hooks() []Hook {
+	return c.hooks.NotificationRule
+}
+
+// Interceptors returns the client interceptors.
+func (c *NotificationRuleClient) Interceptors() []Interceptor {
+	return c.inters.NotificationRule
+}
+
+func (c *NotificationRuleClient) mutate(ctx context.Context, m *NotificationRuleMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NotificationRuleCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NotificationRuleUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NotificationRuleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NotificationRuleDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("db: unknown NotificationRule mutation op: %q", m.Op())
+	}
+}
+
 // UsageResetClient is a client for the UsageReset schema.
 type UsageResetClient struct {
 	config
@@ -1033,9 +1349,11 @@ func (c *UsageResetClient) mutate(ctx context.Context, m *UsageResetMutation) (V
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		BalanceSnapshot, Entitlement, Feature, Grant, UsageReset []ent.Hook
+		BalanceSnapshot, Entitlement, Feature, Grant, NotificationChannel,
+		NotificationRule, UsageReset []ent.Hook
 	}
 	inters struct {
-		BalanceSnapshot, Entitlement, Feature, Grant, UsageReset []ent.Interceptor
+		BalanceSnapshot, Entitlement, Feature, Grant, NotificationChannel,
+		NotificationRule, UsageReset []ent.Interceptor
 	}
 )
